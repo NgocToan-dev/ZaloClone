@@ -1,12 +1,6 @@
-const express = require('express');
-const router = express.Router();
-const auth = require('../middleware/auth');
-const {
-  // Authentication
-  login,
-  register,
-  logout,
-  
+import express from 'express';
+import auth from '@/middleware/auth';
+import {
   // Profile
   getProfile,
   updateProfile,
@@ -25,17 +19,12 @@ const {
   // Status
   updateStatus,
   getOnlineUsers
-} = require('../controllers/userController');
+} from '@/controllers/userController';
 
-// Authentication routes (public)
-router.post('/login', login);
-router.post('/register', register);
+const router = express.Router();
 
-// Protected routes (require authentication)
-router.use(auth); // Apply auth middleware to all routes below
-
-// Logout
-router.post('/logout', logout);
+// Apply auth middleware to all routes (all user routes require authentication)
+router.use(auth);
 
 // Profile routes
 router.get('/profile', getProfile);
@@ -56,4 +45,4 @@ router.delete('/contacts/:userId', removeContact);
 // Status management routes
 router.put('/status', updateStatus);
 
-module.exports = router;
+export default router;

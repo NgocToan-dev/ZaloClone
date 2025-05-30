@@ -1,7 +1,8 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+import mongoose, { Schema } from 'mongoose';
+import bcrypt from 'bcryptjs';
+import { IUser, UserStatus } from '@/types/user.types';
 
-const userSchema = new mongoose.Schema({
+const userSchema = new Schema<IUser>({
   firstName: {
     type: String,
     required: [true, 'First name is required'],
@@ -26,8 +27,8 @@ const userSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['online', 'away', 'busy', 'offline'],
-    default: 'offline'
+    enum: Object.values(UserStatus),
+    default: UserStatus.OFFLINE
   },
   lastSeen: {
     type: Date,
@@ -50,25 +51,34 @@ userSchema.pre('save', async function(next) {
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error) {
-    next(error);
+    next(error as Error);
   }
 });
 
 // Compare password method
-userSchema.methods.comparePassword = async function(password) {
+userSchema.methods.comparePassword = async function(password: string): Promise<boolean> {
   return await bcrypt.compare(password, this.password);
 };
 
 // Virtual for full name
-userSchema.virtual('fullName').get(function() {
+userSchema.virtual('fullName').get(function(this: IUser) {
   return `${this.firstName} ${this.lastName}`;
 });
 
 // Transform JSON output
-userSchema.methods.toJSON = function() {
+userSchema.methods.toJSON = function(this: IUser) {
   const user = this.toObject();
-  delete user.password;
+  delete (user as any).password;
   return user;
 };
 
-module.exports = mongoose.model('User', userSchema);
+// Ensure virtual fields are serialized
+userSchema.set('toJSON', {
+  virtuals: true,
+  transform: function(doc: any, ret: any) {
+    delete ret.password;
+    return ret;
+  }
+});
+
+export default mongoose.model<IUser>('User', userSchema);

@@ -1,9 +1,18 @@
-const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const connectDB = require('./config/database');
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import connectDB from '@/config/database';
+
+// Import routes
+import authRoutes from '@/routes/auth';
+import userRoutes from '@/routes/users';
+import chatRoutes from '@/routes/chat';
+import messageRoutes from '@/routes/message';
+
+// Import socket handler
+import socketHandler from '@/socket/socketHandler';
 
 // Load environment variables
 dotenv.config();
@@ -13,7 +22,7 @@ const app = express();
 const server = http.createServer(app);
 
 // Initialize Socket.io with CORS configuration
-const io = socketIo(server, {
+const io = new Server(server, {
   cors: {
     origin: process.env.CLIENT_URL || "http://localhost:3000",
     methods: ["GET", "POST"]
@@ -36,19 +45,18 @@ app.get('/', (req, res) => {
 });
 
 // API Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/chats', require('./routes/chat'));
-app.use('/api/messages', require('./routes/message'));
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/messages', messageRoutes);
 
 // Socket.io connection handling
-const socketHandler = require('./socket/socketHandler');
 socketHandler(io);
 
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
 
-module.exports = { app, io };
+export { app, io };

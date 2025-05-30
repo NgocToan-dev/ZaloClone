@@ -1,0 +1,15 @@
+{
+  "name": "zaloclone-scripts",
+  "version": "1.0.0",
+  "description": "Database scripts for ZaloClone backend",
+  "scripts": {
+    "seed": "node seedUsers.js",
+    "seed:clear": "node seedUsers.js --clear",
+    "indexes": "node createIndexes.js",
+    "indexes:drop": "node createIndexes.js drop",
+    "setup": "npm run indexes && npm run seed",
+    "reset": "npm run indexes:drop && npm run setup"
+  },
+  "keywords": ["mongodb", "seeding", "database", "zaloclone"],
+  "author": "ZaloClone Team"
+}
