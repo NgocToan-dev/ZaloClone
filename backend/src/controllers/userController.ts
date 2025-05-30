@@ -1,10 +1,9 @@
 import { Request, Response } from 'express';
-import User from '@/models/User';
-import { AuthRequest } from '@/types/auth.types';
+import User from '../models/User';
+import { AuthRequest } from '../types/auth.types';
 import {
   UserResponse,
   UpdateProfileRequest,
-  ChangePasswordRequest,
   SearchUsersQuery,
   AddContactRequest,
   UpdateStatusRequest,
@@ -15,8 +14,8 @@ import {
   ContactsListResponse,
   AddContactResponse,
   UpdateStatusResponse
-} from '@/types/user.types';
-import { TypedResponse } from '@/types/common.types';
+} from '../types/user.types';
+import { TypedResponse } from '../types/common.types';
 
 // User response formatter
 const formatUserResponse = (user: any): UserResponse => ({
@@ -91,49 +90,6 @@ export const updateProfile = async (
       message: 'Server error during profile update',
       user: {} as UserResponse
     });
-  }
-};
-
-// Change password
-export const changePassword = async (
-  req: Request<{}, { message: string }, ChangePasswordRequest>,
-  res: TypedResponse<{ message: string }>
-): Promise<void> => {
-  try {
-    const { currentPassword, newPassword }: ChangePasswordRequest = req.body;
-    const authReq = req as AuthRequest;
-
-    if (!currentPassword || !newPassword) {
-      res.status(400).json({ message: 'Current password and new password are required' });
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      res.status(400).json({ message: 'New password must be at least 6 characters long' });
-      return;
-    }
-
-    const user = await User.findById(authReq.user?._id);
-    if (!user) {
-      res.status(404).json({ message: 'User not found' });
-      return;
-    }
-
-    // Verify current password
-    const isMatch = await user.comparePassword(currentPassword);
-    if (!isMatch) {
-      res.status(400).json({ message: 'Current password is incorrect' });
-      return;
-    }
-
-    // Update password
-    user.password = newPassword;
-    await user.save();
-
-    res.json({ message: 'Password changed successfully' });
-  } catch (error) {
-    console.error('Change password error:', error);
-    res.status(500).json({ message: 'Server error during password change' });
   }
 };
 

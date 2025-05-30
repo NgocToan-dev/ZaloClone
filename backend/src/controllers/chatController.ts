@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import Chat from '@/models/Chat';
-import Message from '@/models/Message';
-import User from '@/models/User';
-import { AuthRequest } from '@/types/auth.types';
+import Chat from '../models/Chat';
+import Message from '../models/Message';
+import User from '../models/User';
+import { AuthRequest } from '../types/auth.types';
 import {
   ChatResponse,
   CreateChatRequest,
@@ -12,8 +12,8 @@ import {
   UpdateChatRequest,
   AddParticipantsRequest,
   ChatQuery
-} from '@/types/chat.types';
-import { TypedResponse } from '@/types/common.types';
+} from '../types/chat.types';
+import { TypedResponse } from '../types/common.types';
 
 // Helper function to format chat response
 const formatChatResponse = (chat: any): ChatResponse => ({

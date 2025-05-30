@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { IMessage, MessageType, Attachment, Reaction } from '@/types/message.types';
+import { IMessage, MessageType, Attachment, Reaction } from '../types/message.types';
 
 const attachmentSchema = new Schema<Attachment>({
   filename: {

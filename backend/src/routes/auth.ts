@@ -1,6 +1,6 @@
 import express from 'express';
-import { register, login, logout, getMe, refreshToken } from '@/controllers/authController';
-import auth from '@/middleware/auth';
+import { register, login, logout, getMe, refreshToken, changePassword } from '../controllers/authController';
+import auth from '../middleware/auth';
 
 const router = express.Router();
 
@@ -28,5 +28,10 @@ router.get('/me', auth, getMe);
 // @desc    Refresh JWT token
 // @access  Private
 router.post('/refresh', auth, refreshToken);
+
+// @route   PUT /api/auth/change-password
+// @desc    Change user password
+// @access  Private
+router.put('/change-password', auth, changePassword);
 
 export default router;

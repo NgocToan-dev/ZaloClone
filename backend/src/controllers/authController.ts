@@ -1,16 +1,16 @@
 import { Request, Response } from 'express';
-import * as jwt from 'jsonwebtoken';
-import User from '@/models/User';
-import { 
-  LoginRequestBody, 
-  RegisterRequestBody, 
+import jwt from 'jsonwebtoken';
+import User from '../models/User';
+import {
+  LoginRequestBody,
+  RegisterRequestBody,
   AuthResponseData,
   UserResponseData,
   TokenPayload,
-  AuthRequest 
-} from '@/types/auth.types';
-import { UserStatus } from '@/types/user.types';
-import { TypedResponse } from '@/types/common.types';
+  AuthRequest
+} from '../types/auth.types';
+import { UserStatus } from '../types/user.types';
+import { TypedResponse } from '../types/common.types';
 
 // Generate JWT Token
 const generateToken = (userId: string): string => {
@@ -19,7 +19,7 @@ const generateToken = (userId: string): string => {
   
   return jwt.sign(payload, secret, {
     expiresIn: process.env.JWT_EXPIRE || '7d'
-  } as any);
+  } as jwt.SignOptions);
 };
 
 // User response formatter for auth endpoints
@@ -248,5 +248,47 @@ export const refreshToken = async (
       token: '',
       user: {} as any
     });
+  }
+};
+
+// Change password
+export const changePassword = async (
+  req: AuthRequest,
+  res: TypedResponse<{ message: string }>
+): Promise<void> => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ message: 'Current password and new password are required' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      res.status(400).json({ message: 'New password must be at least 6 characters long' });
+      return;
+    }
+
+    const user = await User.findById(req.user?._id);
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    // Verify current password
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      res.status(400).json({ message: 'Current password is incorrect' });
+      return;
+    }
+
+    // Update password
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ message: 'Server error during password change' });
   }
 };

@@ -1,5 +1,5 @@
 import express from 'express';
-import auth from '@/middleware/auth';
+import auth from '../middleware/auth';
 import {
   createChat,
   getUserChats,
@@ -10,7 +10,7 @@ import {
   getChatParticipants,
   archiveChat,
   markAsRead
-} from '@/controllers/chatController';
+} from '../controllers/chatController';
 
 const router = express.Router();
 

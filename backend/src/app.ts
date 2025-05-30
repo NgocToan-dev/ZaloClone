@@ -3,16 +3,16 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import connectDB from '@/config/database';
+import connectDB from './config/database';
 
 // Import routes
-import authRoutes from '@/routes/auth';
-import userRoutes from '@/routes/users';
-import chatRoutes from '@/routes/chat';
-import messageRoutes from '@/routes/message';
+import authRoutes from './routes/auth';
+import userRoutes from './routes/users';
+import chatRoutes from './routes/chat';
+import messageRoutes from './routes/message';
 
 // Import socket handler
-import socketHandler from '@/socket/socketHandler';
+import socketHandler from './socket/socketHandler';
 
 // Load environment variables
 dotenv.config();

@@ -1,8 +1,8 @@
 import { Server } from 'socket.io';
-import * as jwt from 'jsonwebtoken';
-import User from '@/models/User';
-import Message from '@/models/Message';
-import Chat from '@/models/Chat';
+import jwt from 'jsonwebtoken';
+import User from '../models/User';
+import Message from '../models/Message';
+import Chat from '../models/Chat';
 import {
   AuthenticatedSocket,
   SocketAuthData,
@@ -15,8 +15,8 @@ import {
   SocketEvents,
   SocketErrorData,
   ConnectedUser
-} from '@/types/socket.types';
-import { TokenPayload } from '@/types/auth.types';
+} from '../types/socket.types';
+import { TokenPayload } from '../types/auth.types';
 
 // Store connected users
 const connectedUsers = new Map<string, ConnectedUser>();

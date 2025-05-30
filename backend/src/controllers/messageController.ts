@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import Message from '@/models/Message';
-import Chat from '@/models/Chat';
-import { AuthRequest } from '@/types/auth.types';
+import Message from '../models/Message';
+import Chat from '../models/Chat';
+import { AuthRequest } from '../types/auth.types';
 import {
   SendMessageRequest,
   EditMessageRequest,
@@ -16,8 +16,8 @@ import {
   MarkAsReadResponse,
   MessagesListResponse,
   MessageType
-} from '@/types/message.types';
-import { TypedResponse } from '@/types/common.types';
+} from '../types/message.types';
+import { TypedResponse } from '../types/common.types';
 
 // Helper function to format message response
 const formatMessageResponse = (message: any): MessageResponse => ({
