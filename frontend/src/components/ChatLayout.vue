@@ -87,15 +87,15 @@
               :class="{ 'active': chatStore.currentChat?._id === chat._id }"
             >
               <div class="flex justify-between items-start">
-                <div class="flex-1">
-                  <h3 class="font-medium text-gray-900 mb-1">
+                <div class="flex-1 min-w-0 pr-3">
+                  <h3 class="font-medium text-gray-900 mb-1 truncate">
                     {{ getChatName(chat) }}
                   </h3>
                   <p class="text-sm text-gray-600 truncate">
                     {{ chat.lastMessage?.content || 'Chưa có tin nhắn' }}
                   </p>
                 </div>
-                <span class="text-xs text-gray-500">
+                <span class="text-xs text-gray-500 whitespace-nowrap flex-shrink-0">
                   {{ formatDate(chat.updatedAt) }}
                 </span>
               </div>
@@ -339,11 +339,20 @@ export default {
   border-right: 3px solid #3b82f6;
 }
 
+.chat-item .flex-1 {
+  min-width: 0; /* Allow flex item to shrink below content size */
+}
+
+.chat-item h3 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chat-item p {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 250px; /* Limit width for truncation */
 }
 
 .chat-main {

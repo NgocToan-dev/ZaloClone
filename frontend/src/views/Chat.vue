@@ -297,13 +297,19 @@ export default {
       if (newChatId && currentChat.value?._id !== newChatId) {
         const chat = chatStore.chats.find(c => c._id === newChatId)
         if (chat) {
+          console.log('🔄 ROUTE: Chat changed via route, setting current chat:', newChatId)
           chatStore.setCurrentChat(chat)
           
           // Load draft
           newMessage.value = chatStore.getDraft(chat._id)
+        } else {
+          console.log('⚠️ ROUTE: Chat not found in loaded chats, waiting...', newChatId)
         }
+      } else if (!newChatId && currentChat.value) {
+        console.log('🔄 ROUTE: No chat ID in route, clearing current chat')
+        chatStore.setCurrentChat(null)
       }
-    })
+    }, { immediate: true })
 
     // Watch for current chat changes to load draft
     watch(() => currentChat.value, (newChat, oldChat) => {
@@ -319,13 +325,42 @@ export default {
       }
     })
 
-    onMounted(() => {
+    onMounted(async () => {
+      console.log('🚀 CHAT: Component mounted, route chatId:', route.params.id)
+      console.log('🚀 CHAT: Current chat from store:', currentChat.value?._id)
+      
       const chatId = route.params.id
+      
+      // If we have a chat ID in route but no current chat, or they don't match
       if (chatId && currentChat.value?._id !== chatId) {
-        const chat = chatStore.chats.find(c => c._id === chatId)
+        console.log('🔍 CHAT: Looking for chat in loaded chats:', chatId)
+        let chat = chatStore.chats.find(c => c._id === chatId)
+        
+        // If chat not found and chats are not loaded yet, wait for them
+        if (!chat && chatStore.chats.length === 0 && !chatStore.isLoading) {
+          console.log('📥 CHAT: Chats not loaded, fetching...')
+          await chatStore.fetchChats()
+          chat = chatStore.chats.find(c => c._id === chatId)
+        }
+        
         if (chat) {
+          console.log('✅ CHAT: Found chat, setting as current:', chat._id)
           chatStore.setCurrentChat(chat)
           newMessage.value = chatStore.getDraft(chat._id)
+        } else {
+          console.log('❌ CHAT: Chat not found:', chatId)
+        }
+      } else if (!chatId && currentChat.value) {
+        console.log('🔄 CHAT: No chat ID in route but have current chat, clearing')
+        chatStore.setCurrentChat(null)
+      } else if (chatId && currentChat.value?._id === chatId) {
+        console.log('✅ CHAT: Route and current chat match, loading draft')
+        newMessage.value = chatStore.getDraft(chatId)
+        
+        // If current chat exists but no messages, ensure messages are loaded
+        if (currentChat.value && chatStore.messages.length === 0 && !chatStore.isLoadingMessages) {
+          console.log('📥 CHAT: Current chat has no messages, fetching...')
+          await chatStore.fetchMessages(currentChat.value._id)
         }
       }
       

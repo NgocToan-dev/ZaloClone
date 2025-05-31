@@ -1,6 +1,9 @@
-# Active Context - Message Binding Issue
+# Active Context - CurrentChat Persistence Issue
 
-## Current Problem
+## Current Problem ✅ SOLVED
+Mỗi lần F5 (refresh) thì currentChat không còn nữa, người dùng phải chọn lại chat.
+
+## Previous Problem ✅ SOLVED
 Sau khi gửi tin nhắn, message không hiển thị trong UI mặc dù API response thành công.
 
 ## API Response Analysis
@@ -32,25 +35,38 @@ Sau khi gửi tin nhắn, message không hiển thị trong UI mặc dù API res
 }
 ```
 
-## Identified Issue ✅ SOLVED
+## CurrentChat Persistence Issue ✅ SOLVED
+
+### Root Cause
+- Pinia store state không persist qua page refresh
+- [`currentChat`](src/store/chat.js:11) gets reset to `null` khi F5
+- User phải chọn lại chat mỗi lần refresh
+- **Missing fetchMessages()**: CurrentChat được restore nhưng messages không được load
+
+### Solution Applied ✅
+1. **Added localStorage persistence**:
+   - Store `currentChatId` và `currentChat` trong localStorage khi set
+   - Restore từ localStorage khi init store
+   
+2. **Enhanced chat restoration**:
+   - [`restoreCurrentChat()`](src/store/chat.js:61) - Restore saved chat after fetchChats
+   - **FIXED**: Added `await this.fetchMessages(savedChat._id)` trong restore process
+   - Update stored chat với fresh data từ server
+   - Handle trường hợp chat không tồn tại nữa
+   
+3. **Improved Chat.vue mounting**:
+   - Better handling của route params vs stored chat
+   - Fetch chats nếu chưa load khi mount
+   - Added fallback để fetch messages nếu current chat có nhưng messages empty
+   - Proper sync giữa route và currentChat state
+
+### Key Fix
+**The critical missing piece**: When restoring currentChat from localStorage, messages weren't being fetched automatically. Now [`restoreCurrentChat()`](src/store/chat.js:81) calls `fetchMessages()` ensuring the API call `http://localhost:5000/api/messages/{chatId}?page=1&limit=50` happens on F5.
+
+### Previous Message Issue ✅ SOLVED
 **Root Cause**: API response structure sai assumption - message data nằm trong `messageData` field.
 
-## Analysis
-1. **API Response Structure**:
-   ```json
-   {
-     "message": "Message sent successfully",
-     "messageData": { ...actual message object... }
-   }
-   ```
-2. **Code Issue**: [`sendMessage()`](src/store/chat.js:127) đang extract từ `response.data.message` thay vì `response.data.messageData`
-3. **Result**: `message` variable gets success text thay vì message object, causing addMessage fail
-
-## Solution Applied ✅
-1. **Fixed addMessage logic** - Handle missing chatId
-2. **Added comprehensive debug logging** - Track message flow
-3. **Removed duplicate socket call** - Avoid confusion in Chat.vue
-4. **Added Vue reactivity debugging** - Monitor state changes
+**Solution**: Fixed [`sendMessage()`](src/store/chat.js:174) để extract từ `response.data.messageData`
 
 ## Debug Process 🔍
 Để debug vấn đề:
@@ -69,9 +85,21 @@ Sau khi gửi tin nhắn, message không hiển thị trong UI mặc dù API res
    - 📊 = Messages count change
    - 📬 = Messages array change
 
-## What to Check
-- API response structure
-- Message có chatId hay không
-- currentChat context
-- Vue reactivity triggers
-- Messages array updates
+## Implementation Details
+
+### localStorage Keys
+- `currentChatId`: Stores only the chat ID
+- `currentChat`: Stores full chat object for immediate restoration
+
+### Flow
+1. User selects chat → [`setCurrentChat()`](src/store/chat.js:364) → Save to localStorage
+2. Page refresh → Store init → Restore từ localStorage nếu có
+3. [`fetchChats()`](src/store/chat.js:40) complete → [`restoreCurrentChat()`](src/store/chat.js:67) validates và updates
+4. Chat.vue mount → Sync với route params nếu cần
+
+### Debug Logs
+- 💾 = Persist to localStorage
+- 🗑️ = Clear from localStorage
+- 🔄 = Restore attempt
+- ✅ = Successfully restored
+- ❌ = Restore failed (chat not found)

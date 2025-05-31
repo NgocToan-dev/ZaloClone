@@ -7,7 +7,8 @@ import { useAuthStore } from './auth.js'
 export const useChatStore = defineStore('chat', {
   state: () => ({
     chats: [],
-    currentChat: null,
+    currentChat: localStorage.getItem('currentChatId') ?
+      JSON.parse(localStorage.getItem('currentChat') || 'null') : null,
     messages: [],
     searchResults: [],
     isLoading: false,
@@ -46,11 +47,50 @@ export const useChatStore = defineStore('chat', {
         
         // Load unread count
         await this.loadUnreadCount()
+        
+        // Restore current chat if it exists in localStorage and we have chats
+        await this.restoreCurrentChat()
       } catch (error) {
         this.error = error.response?.data?.message || 'Failed to fetch chats'
         console.error('Failed to fetch chats:', error)
       } finally {
         this.isLoading = false
+      }
+    },
+
+    async restoreCurrentChat() {
+      const savedChatId = localStorage.getItem('currentChatId')
+      
+      if (savedChatId && this.chats.length > 0) {
+        console.log('🔄 CHAT: Attempting to restore current chat:', savedChatId)
+        
+        // Find the chat in our loaded chats
+        const savedChat = this.chats.find(chat => chat._id === savedChatId)
+        
+        if (savedChat) {
+          console.log('✅ CHAT: Found saved chat, restoring:', savedChat._id)
+          // Update the stored chat data with fresh data from server
+          this.currentChat = savedChat
+          localStorage.setItem('currentChat', JSON.stringify(savedChat))
+          
+          // Join chat room if socket is connected
+          if (socketService.isConnected()) {
+            socketService.joinChat(savedChat._id)
+          }
+          
+          // Fetch messages for restored chat
+          console.log('📥 CHAT: Fetching messages for restored chat:', savedChat._id)
+          await this.fetchMessages(savedChat._id)
+        } else {
+          console.log('❌ CHAT: Saved chat not found in current chats, clearing localStorage')
+          localStorage.removeItem('currentChatId')
+          localStorage.removeItem('currentChat')
+          this.currentChat = null
+        }
+      } else if (savedChatId && this.chats.length === 0) {
+        console.log('⏳ CHAT: Saved chat exists but chats not loaded yet')
+      } else {
+        console.log('ℹ️ CHAT: No saved chat to restore')
       }
     },
 
@@ -349,7 +389,12 @@ export const useChatStore = defineStore('chat', {
       this.currentChat = chat
       this.clearSearchResults()
       
+      // Persist current chat in localStorage
       if (chat) {
+        localStorage.setItem('currentChatId', chat._id)
+        localStorage.setItem('currentChat', JSON.stringify(chat))
+        console.log('💾 CHAT: Persisted current chat to localStorage:', chat._id)
+        
         console.log('🏠 CHAT: Setting new current chat and joining room:', chat._id)
         
         // Join new chat via socket immediately
@@ -361,6 +406,9 @@ export const useChatStore = defineStore('chat', {
         
         this.fetchMessages(chat._id)
       } else {
+        localStorage.removeItem('currentChatId')
+        localStorage.removeItem('currentChat')
+        console.log('🗑️ CHAT: Cleared current chat from localStorage')
         this.clearMessages()
       }
     },
@@ -491,6 +539,10 @@ export const useChatStore = defineStore('chat', {
       this.messageDrafts = {}
       this.unreadCount = 0
       this.error = null
+      
+      // Clear persisted current chat
+      localStorage.removeItem('currentChatId')
+      localStorage.removeItem('currentChat')
     }
   }
 })
