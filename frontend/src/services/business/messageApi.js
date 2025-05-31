@@ -1,4 +1,4 @@
-import BaseApi from './baseApi.js'
+import BaseApi from '../baseApi.js'
 
 class MessageApi extends BaseApi {
   constructor() {
@@ -7,11 +7,15 @@ class MessageApi extends BaseApi {
 
   // Message basic operations
   async sendMessage(chatId, content) {
-    return await this.post('', { chatId, content })
+    return await this.post(`/${chatId}`, { content })
+  }
+
+  async getMessageById(messageId) {
+    return await this.get(`/single/${messageId}`)
   }
 
   async getMessage(messageId) {
-    return await this.getById(messageId)
+    return await this.getMessageById(messageId)
   }
 
   async updateMessage(messageId, content) {
@@ -26,7 +30,7 @@ class MessageApi extends BaseApi {
   async getChatMessages(chatId, page = 1, limit = 50, before = null) {
     const params = new URLSearchParams({ page, limit })
     if (before) params.append('before', before)
-    return await this.get(`/chat/${chatId}?${params.toString()}`)
+    return await this.get(`/${chatId}?${params.toString()}`)
   }
 
   async getMessagesBefore(chatId, messageId, limit = 20) {
@@ -53,6 +57,10 @@ class MessageApi extends BaseApi {
     return await this.put(`/${messageId}/read`)
   }
 
+  async markChatAsRead(chatId) {
+    return await this.put(`/${chatId}/read`)
+  }
+
   async markAsDelivered(messageId) {
     return await this.put(`/${messageId}/delivered`)
   }
@@ -62,8 +70,12 @@ class MessageApi extends BaseApi {
   }
 
   // Message reactions
+  async reactToMessage(messageId, reaction) {
+    return await this.post(`/${messageId}/react`, { reaction })
+  }
+
   async addReaction(messageId, reaction) {
-    return await this.post(`/${messageId}/reactions`, { reaction })
+    return await this.reactToMessage(messageId, reaction)
   }
 
   async removeReaction(messageId, reaction) {

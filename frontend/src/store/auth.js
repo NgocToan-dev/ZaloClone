@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
-import { userApi } from '../services'
+import userApi from '@services/business/userApi.js'
+import authApi from '@services/auth/authApi.js'
+import socketService from '@services/business/socket.js'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -48,13 +50,16 @@ export const useAuthStore = defineStore('auth', {
       this.error = null
 
       try {
-        const response = await userApi.login(credentials.email, credentials.password)
+        const response = await authApi.login(credentials.email, credentials.password)
         
         this.token = response.data.token
         this.user = response.data.user
         this.userStatus = 'online'
         
         localStorage.setItem('token', this.token)
+        
+        // Connect to socket server
+        socketService.connect(this.token)
         
         // Load user data after login
         await this.loadUserData()
@@ -183,6 +188,9 @@ export const useAuthStore = defineStore('auth', {
       } catch (error) {
         console.error('Logout error:', error)
       } finally {
+        // Disconnect from socket
+        socketService.disconnect()
+        
         this.user = null
         this.token = null
         this.error = null
@@ -198,6 +206,9 @@ export const useAuthStore = defineStore('auth', {
       if (this.token) {
         await this.getCurrentUser()
         if (this.user) {
+          // Connect to socket server with existing token
+          socketService.connect(this.token)
+          
           await this.loadUserData()
           this.userStatus = 'online'
         }

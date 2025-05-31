@@ -1,31 +1,18 @@
 <template>
-  <div class="flex flex-col h-full">
+  <div class="chat-view">
     <!-- Chat Header -->
-    <div v-if="chatStore.currentChat" class="bg-white border-b border-gray-200 p-4">
+    <div v-if="currentChat" class="chat-header">
       <h2 class="font-semibold text-gray-900">
-        💬 {{ getChatName(chatStore.currentChat) }}
+        💬 {{ getChatName(currentChat) }}
       </h2>
     </div>
 
-    <!-- No Chat Selected -->
-    <div v-if="!chatStore.currentChat" class="flex-1 flex items-center justify-center bg-gray-100">
-      <div class="text-center text-gray-500">
-        <div class="w-16 h-16 mx-auto mb-4 bg-gray-300 rounded-full flex items-center justify-center">
-          <svg class="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-4.946-1.524A11.05 11.05 0 014 13.372 8 8 0 1121 12z" />
-          </svg>
-        </div>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">Chưa chọn cuộc trò chuyện</h3>
-        <p class="text-sm text-gray-500">Chọn một cuộc trò chuyện từ sidebar để bắt đầu nhắn tin.</p>
-      </div>
-    </div>
-
     <!-- Chat Messages -->
-    <div v-else class="flex-1 flex flex-col">
+    <div v-if="currentChat" class="chat-content">
       <!-- Messages Area -->
-      <div ref="messagesContainer" class="messages-container overflow-y-auto flex-1 p-4">
+      <div ref="messagesContainer" class="messages-container">
         <!-- Load More Button -->
-        <div v-if="chatStore.hasMoreMessages" class="text-center mb-4">
+        <div v-if="hasMoreMessages" class="text-center mb-4">
           <button
             @click="loadMoreMessages"
             :disabled="isLoadingMore"
@@ -38,12 +25,12 @@
             {{ isLoadingMore ? 'Đang tải...' : 'Tải tin nhắn cũ hơn' }}
           </button>
         </div>
-
-        <div v-if="chatStore.isLoadingMessages" class="text-center text-gray-500 py-8">
+        
+        <div v-if="isLoadingMessages" class="text-center text-gray-500 py-8">
           <div class="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
           Đang tải tin nhắn...
         </div>
-        <div v-else-if="chatStore.messages.length === 0" class="text-center text-gray-500 py-8">
+        <div v-else-if="messagesCount === 0" class="text-center text-gray-500 py-8">
           <div class="w-12 h-12 mx-auto mb-2 bg-gray-300 rounded-full flex items-center justify-center">
             ✨
           </div>
@@ -51,7 +38,7 @@
         </div>
         <div v-else class="space-y-3">
           <div
-            v-for="message in chatStore.messages"
+            v-for="message in messages"
             :key="message._id"
             class="message"
             :class="{ 'own': isOwnMessage(message), 'other': !isOwnMessage(message) }"
@@ -62,7 +49,7 @@
                    'bg-gray-200 text-gray-900': !isOwnMessage(message)
                  }">
               <div v-if="!isOwnMessage(message)" class="text-xs opacity-75 mb-1">
-                {{ message.senderId?.firstName }} {{ message.senderId?.lastName }}
+                {{ message.sender?.firstName }} {{ message.sender?.lastName }}
               </div>
               <p class="text-sm whitespace-pre-wrap">{{ message.content }}</p>
               <div class="text-xs mt-1 opacity-75 text-right">
@@ -89,8 +76,8 @@
       </div>
 
       <!-- Message Input -->
-      <div class="border-t border-gray-200 p-4">
-        <form @submit.prevent="sendMessage" class="flex space-x-3">
+      <div class="message-input">
+        <form @submit.prevent="sendMessage" class="flex space-x-3 items-center w-full">
           <textarea
             v-model="newMessage"
             placeholder="Nhập tin nhắn..."
@@ -99,12 +86,11 @@
             :disabled="isSending"
             @input="handleTyping"
             @keydown="onKeydown"
-            style="max-height: 120px; min-height: 40px;"
           ></textarea>
           <button
             type="submit"
             :disabled="!newMessage.trim() || isSending"
-            class="btn btn-primary px-4 self-end"
+            class="btn btn-primary px-6 py-3"
           >
             <svg v-if="isSending" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -123,7 +109,7 @@
 <script>
 import { ref, nextTick, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useAuthStore, useChatStore, useUIStore, useSocketStore } from '../store'
+import { useAuthStore, useChatStore, useUIStore } from '../store'
 
 export default {
   name: 'Chat',
@@ -132,7 +118,6 @@ export default {
     const authStore = useAuthStore()
     const chatStore = useChatStore()
     const uiStore = useUIStore()
-    const socketStore = useSocketStore()
     
     const messagesContainer = ref(null)
     const newMessage = ref('')
@@ -147,7 +132,7 @@ export default {
     }
 
     const isOwnMessage = (message) => {
-      return message.senderId._id === authStore.currentUser?._id
+      return message.sender?._id === authStore.currentUser?._id
     }
 
     const formatMessageTime = (dateString) => {
@@ -173,8 +158,16 @@ export default {
       })
     }
 
+    // Computed properties để đảm bảo reactivity
+    const currentChat = computed(() => chatStore.currentChat)
+    const messages = computed(() => chatStore.messages)
+    const messagesCount = computed(() => chatStore.messages.length)
+    const isLoadingMessages = computed(() => chatStore.isLoadingMessages)
+    const hasMoreMessages = computed(() => chatStore.hasMoreMessages)
+    const error = computed(() => chatStore.error)
+
     const loadMoreMessages = async () => {
-      if (isLoadingMore.value || !chatStore.hasMoreMessages || !chatStore.currentChat) return
+      if (isLoadingMore.value || !hasMoreMessages.value || !currentChat.value) return
       
       isLoadingMore.value = true
       const scrollHeight = messagesContainer.value?.scrollHeight || 0
@@ -206,32 +199,32 @@ export default {
       const { scrollTop } = messagesContainer.value
       
       // Load more messages when scrolled to top
-      if (scrollTop === 0 && chatStore.hasMoreMessages) {
+      if (scrollTop === 0 && hasMoreMessages.value) {
         loadMoreMessages()
       }
     }
 
     const sendMessage = async () => {
-      if (!newMessage.value.trim() || !chatStore.currentChat || isSending.value) return
+      if (!newMessage.value.trim() || !currentChat.value || isSending.value) return
 
       isSending.value = true
       const content = newMessage.value.trim()
       
       // Clear draft and input immediately for better UX
-      chatStore.clearDraft(chatStore.currentChat._id)
+      chatStore.clearDraft(currentChat.value._id)
       newMessage.value = ''
       
-      // Stop typing indicator
-      socketStore.stopTyping(chatStore.currentChat._id)
+      // Stop typing indicator - handled by socket service
 
       try {
-        const message = await chatStore.sendMessage(chatStore.currentChat._id, content)
+        console.log('🚀 Sending message:', { chatId: currentChat.value._id, content })
+        const message = await chatStore.sendMessage(currentChat.value._id, content)
         
         if (message) {
-          // Send via socket for real-time updates
-          socketStore.sendMessage(chatStore.currentChat._id, content)
+          console.log('✅ Message sent successfully, scrolling to bottom')
           scrollToBottom()
         } else {
+          console.log('❌ Message sending failed, restoring content')
           // Restore message if sending failed
           newMessage.value = content
         }
@@ -248,22 +241,21 @@ export default {
     }
 
     const handleTyping = () => {
-      if (!chatStore.currentChat) return
+      if (!currentChat.value) return
       
       // Save draft
-      chatStore.saveDraft(chatStore.currentChat._id, newMessage.value)
+      chatStore.saveDraft(currentChat.value._id, newMessage.value)
       
-      // Send typing indicator
-      socketStore.startTyping(chatStore.currentChat._id)
+      // Send typing indicator - handled by socket service
       
       // Clear previous timeout
       if (typingTimeout.value) {
         clearTimeout(typingTimeout.value)
       }
       
-      // Stop typing after 3 seconds of inactivity
+      // Stop typing after 3 seconds of inactivity - handled by socket service
       typingTimeout.value = setTimeout(() => {
-        socketStore.stopTyping(chatStore.currentChat._id)
+        // Socket service will handle typing stop
       }, 3000)
     }
 
@@ -276,8 +268,8 @@ export default {
 
     // Get typing users for current chat
     const typingUsers = computed(() => {
-      if (!chatStore.currentChat) return []
-      return chatStore.getTypingUsers(chatStore.currentChat._id)
+      if (!currentChat.value) return []
+      return chatStore.getTypingUsers(currentChat.value._id)
         .filter(userId => userId !== authStore.currentUser?._id)
         .map(userId => {
           const user = authStore.contacts.find(c => c._id === userId)
@@ -286,17 +278,26 @@ export default {
     })
 
     // Watch for new messages to auto-scroll
-    watch(() => chatStore.messages.length, () => {
+    watch(() => messagesCount.value, (newCount, oldCount) => {
+      console.log('📊 Messages count changed:', { oldCount, newCount })
       scrollToBottom()
     })
 
+    // Debug watcher for messages array
+    watch(() => messages.value, (newMessages, oldMessages) => {
+      console.log('📬 Messages array changed:', {
+        oldLength: oldMessages?.length || 0,
+        newLength: newMessages?.length || 0,
+        messages: newMessages
+      })
+    }, { deep: true })
+
     // Watch for chat changes
     watch(() => route.params.id, (newChatId) => {
-      if (newChatId && chatStore.currentChat?._id !== newChatId) {
+      if (newChatId && currentChat.value?._id !== newChatId) {
         const chat = chatStore.chats.find(c => c._id === newChatId)
         if (chat) {
           chatStore.setCurrentChat(chat)
-          socketStore.joinChat(chat._id)
           
           // Load draft
           newMessage.value = chatStore.getDraft(chat._id)
@@ -305,12 +306,11 @@ export default {
     })
 
     // Watch for current chat changes to load draft
-    watch(() => chatStore.currentChat, (newChat, oldChat) => {
+    watch(() => currentChat.value, (newChat, oldChat) => {
       if (oldChat) {
         // Save draft for previous chat
         chatStore.saveDraft(oldChat._id, newMessage.value)
-        // Stop typing for previous chat
-        socketStore.stopTyping(oldChat._id)
+        // Stop typing for previous chat - handled by socket service
       }
       
       if (newChat) {
@@ -321,11 +321,10 @@ export default {
 
     onMounted(() => {
       const chatId = route.params.id
-      if (chatId && chatStore.currentChat?._id !== chatId) {
+      if (chatId && currentChat.value?._id !== chatId) {
         const chat = chatStore.chats.find(c => c._id === chatId)
         if (chat) {
           chatStore.setCurrentChat(chat)
-          socketStore.joinChat(chat._id)
           newMessage.value = chatStore.getDraft(chat._id)
         }
       }
@@ -340,9 +339,9 @@ export default {
 
     onUnmounted(() => {
       // Save draft before unmounting
-      if (chatStore.currentChat) {
-        chatStore.saveDraft(chatStore.currentChat._id, newMessage.value)
-        socketStore.stopTyping(chatStore.currentChat._id)
+      if (currentChat.value) {
+        chatStore.saveDraft(currentChat.value._id, newMessage.value)
+        // Stop typing handled by socket service
       }
       
       // Remove scroll listener
@@ -365,6 +364,14 @@ export default {
       isSending,
       isLoadingMore,
       typingUsers,
+      // Computed properties
+      currentChat,
+      messages,
+      messagesCount,
+      isLoadingMessages,
+      hasMoreMessages,
+      error,
+      // Methods
       getChatName,
       isOwnMessage,
       formatMessageTime,
@@ -376,3 +383,147 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.chat-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-header {
+  height: 64px;
+  background-color: white;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.chat-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  min-height: 0;
+}
+
+.message-input {
+  min-height: 100px;
+  border-top: 1px solid #e5e7eb;
+  padding: 1.5rem;
+  background-color: white;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+}
+
+.message {
+  margin-bottom: 0.75rem;
+}
+
+.message.own {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.message.other {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.message-bubble {
+  max-width: 75%;
+  word-wrap: break-word;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+}
+
+.message.own .message-bubble {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.message.other .message-bubble {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+/* Scroll styling for messages */
+.messages-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Form textarea auto-resize */
+.form-input {
+  resize: none;
+  overflow-y: auto;
+  flex: 1;
+  margin-right: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 1rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  background-color: #f9fafb;
+  transition: all 0.2s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background-color: white;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.btn {
+  border-radius: 1rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  height: 48px;
+}
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #2563eb;
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+}
+</style>

@@ -1,0 +1,39 @@
+# ZaloClone Frontend - Project Intelligence
+
+## Message Binding Pattern ⚠️
+**Critical Fix Applied**: API response structure khác với expected structure.
+
+### Key Insight - API Response Structure
+- API trả về message data trong `messageData` field, KHÔNG phải `message` field
+- Response structure: `{ message: "success text", messageData: {...actual message data} }`
+- [`sendMessage()`](src/store/chat.js:127) cần extract từ `response.data.messageData`
+
+### Best Practice
+```javascript
+// Always extract message từ đúng field
+const message = response.data.messageData || response.data.message
+
+// Always ensure chatId có sẵn trước khi process message
+const chatId = message.chatId || (this.currentChat && this.currentChat._id)
+```
+
+## Debugging Strategy
+- Add console.log với prefix emoji (📤📨✅❌) để dễ track
+- Check duplicate messages bằng `message._id`
+- Verify reactive binding bằng Vue DevTools
+
+## Message Flow
+1. User gửi message → [`sendMessage()`](src/store/chat.js:127) 
+2. API call success → ensure `chatId` exists
+3. Call [`addMessage()`](src/store/chat.js:287) → update UI
+4. Socket broadcast → other clients receive via [`message:new`](src/store/socket.js:112)
+
+## Common Pitfalls
+- Không kiểm tra `message.chatId` existence trước khi bind
+- Duplicate messages khi cả API và Socket đều trigger addMessage
+- Missing currentChat context khi process messages
+
+## Vue Reactivity Notes
+- Messages binding qua computed properties trong Chat.vue
+- Watch `messagesCount` để auto-scroll
+- Ensure Pinia state mutations trigger reactivity correctly

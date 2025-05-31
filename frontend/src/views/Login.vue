@@ -78,7 +78,6 @@ export default {
 
     const handleLogin = async () => {
       authStore.clearError()
-      
       const result = await authStore.login(form.value)
       if (result.success) {
         // Initialize socket connection after successful login
@@ -87,7 +86,7 @@ export default {
       }
     }
 
-    onMounted(() => {
+    onMounted(() => { 
       // Redirect if already authenticated
       if (authStore.isAuthenticated) {
         router.push('/')

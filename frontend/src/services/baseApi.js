@@ -1,16 +1,16 @@
-import { get, post, put, del } from './api.js'
+import { get, post, put, del } from '@services/httpClient.js';
 
 class BaseApi {
   baseUrl = "";
   controller = "";
 
   constructor(controller = '') {
-    this.baseUrl = '';
+    this.baseUrl = ''; // httpClient already handles baseURL from config
     this.controller = controller;
   }
 
   getApiUrl() {
-    return this.baseUrl + this.controller;
+    return this.controller; // Just return controller path since httpClient handles baseURL
   }
 
   // Basic HTTP methods

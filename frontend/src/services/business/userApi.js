@@ -1,22 +1,26 @@
-import BaseApi from './baseApi.js'
+import BaseApi from '@services/baseApi.js'
+import { post } from '@services/httpClient.js'
 
 class UserApi extends BaseApi {
   constructor() {
     super('/api/users')
   }
 
-  // Authentication methods
-  async login(email, password) {
-    return await this.post('/login', { email, password })
-  }
-
+  // Auth-related methods (for backward compatibility - these should use authApi)
   async register(userData) {
+    // Use httpClient directly for auth endpoints
     const { firstName, lastName, email, password } = userData
-    return await this.post('/register', { firstName, lastName, email, password })
+    return await post('/api/auth/register', {
+      firstName,
+      lastName,
+      email,
+      password
+    })
   }
 
   async logout() {
-    return await this.post('/logout')
+    // Use httpClient directly for auth endpoints
+    return await post('/api/auth/logout')
   }
 
   // Profile methods
@@ -29,17 +33,25 @@ class UserApi extends BaseApi {
   }
 
   async changePassword(currentPassword, newPassword) {
-    return await this.put('/change-password', { currentPassword, newPassword })
+    // Use httpClient directly for auth endpoints
+    return await post('/api/auth/change-password', {
+      currentPassword,
+      newPassword
+    })
   }
 
   // User search and discovery
   async searchUsers(query, filters = {}) {
-    const params = { q: query, ...filters }
-    return await this.search(params)
+    const params = new URLSearchParams({ q: query, ...filters }).toString()
+    return await this.get(`/search?${params}`)
   }
 
   async getUserByEmail(email) {
     return await this.get(`/email/${email}`)
+  }
+
+  async getUserById(id) {
+    return await this.get(`/info/${id}`)
   }
 
   // User relationships/contacts

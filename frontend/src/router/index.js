@@ -14,15 +14,20 @@ const routes = [
   },
   {
     path: '/',
-    name: 'Home',
-    component: () => import('../views/Home.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/chat/:id?',
-    name: 'Chat',
-    component: () => import('../views/Chat.vue'),
-    meta: { requiresAuth: true }
+    component: () => import('../components/ChatLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'Home',
+        component: () => import('../views/Home.vue')
+      },
+      {
+        path: 'chat/:id',
+        name: 'Chat',
+        component: () => import('../views/Chat.vue')
+      }
+    ]
   }
 ]
 

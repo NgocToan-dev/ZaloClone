@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
-import { chatApi, messageApi } from '../services'
+import chatApi from '@services/business/chatApi.js'
+import messageApi from '@services/business/messageApi.js'
+import socketService from '@services/business/socket.js'
+import { useAuthStore } from './auth.js'
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -37,7 +40,6 @@ export const useChatStore = defineStore('chat', {
     async fetchChats() {
       this.isLoading = true
       this.error = null
-      
       try {
         const response = await chatApi.getUserChats()
         this.chats = response.data.chats || []
@@ -78,6 +80,7 @@ export const useChatStore = defineStore('chat', {
     async fetchMessages(chatId, page = 1, reset = true) {
       this.isLoadingMessages = true
       this.error = null
+      const startTime = Date.now()
       
       if (reset) {
         this.messages = []
@@ -102,10 +105,17 @@ export const useChatStore = defineStore('chat', {
         // Mark messages as read
         await this.markChatAsRead(chatId)
         
+        // Đảm bảo loading state hiển thị ít nhất 500ms để người dùng thấy được
+        const elapsed = Date.now() - startTime
+        if (elapsed < 500) {
+          await new Promise(resolve => setTimeout(resolve, 500 - elapsed))
+        }
+        
       } catch (error) {
         this.error = error.response?.data?.message || 'Failed to fetch messages'
         console.error('Failed to fetch messages:', error)
       } finally {
+        console.log('✅ fetchMessages: Setting isLoadingMessages to false')
         this.isLoadingMessages = false
       }
     },
@@ -118,6 +128,40 @@ export const useChatStore = defineStore('chat', {
 
     async sendMessage(chatId, content, attachments = null) {
       try {
+        console.log('📤 Sending message:', { chatId, content, hasAttachments: !!attachments })
+        
+        // Send via socket for real-time communication (no attachments)
+        if (socketService.isConnected() && !attachments) {
+          // Create temporary message for immediate UI feedback
+          const authStore = useAuthStore()
+          const tempMessage = {
+            _id: `temp_${Date.now()}`, // Temporary ID
+            chatId,
+            content: content.trim(),
+            messageType: 'text',
+            senderId: authStore.currentUser._id,
+            sender: authStore.currentUser, // For immediate display
+            createdAt: new Date(),
+            isTemporary: true
+          }
+          
+          // Add to UI immediately for sender
+          console.log('📤 Adding temporary message to UI:', tempMessage)
+          this.addMessage(tempMessage)
+          
+          // Send via socket
+          const messageData = {
+            chatId,
+            content: content.trim(),
+            messageType: 'text'
+          }
+          
+          socketService.sendMessage(messageData)
+          this.clearDraft(chatId)
+          return tempMessage
+        }
+        
+        // Fallback to API for attachments or when socket is not connected
         let response
         if (attachments) {
           response = await messageApi.sendMessageWithAttachment(chatId, content, attachments)
@@ -125,14 +169,27 @@ export const useChatStore = defineStore('chat', {
           response = await messageApi.sendMessage(chatId, content)
         }
         
-        const message = response.data.message
+        console.log('📥 API response:', response.data)
+        
+        const message = response.data.messageData || response.data.message
+        console.log('📩 Extracted message from API:', message)
+        
+        if (!message) {
+          console.error('❌ No message data in API response')
+          return null
+        }
+        
+        if (!message.chatId) {
+          message.chatId = chatId
+        }
+        
         this.addMessage(message)
         this.clearDraft(chatId)
         
         return message
       } catch (error) {
         this.error = error.response?.data?.message || 'Failed to send message'
-        console.error('Failed to send message:', error)
+        console.error('❌ Failed to send message:', error)
         return null
       }
     },
@@ -195,6 +252,21 @@ export const useChatStore = defineStore('chat', {
 
     async markChatAsRead(chatId) {
       try {
+        // Mark as read via socket if connected
+        if (socketService.isConnected()) {
+          const authStore = useAuthStore()
+          const currentUserId = authStore.currentUser?._id
+          
+          const unreadMessageIds = this.messages
+            .filter(msg => msg.senderId !== currentUserId && !msg.readBy?.includes(currentUserId))
+            .map(msg => msg._id)
+          
+          if (unreadMessageIds.length > 0) {
+            socketService.markAsRead(chatId, unreadMessageIds)
+          }
+        }
+        
+        // Also call API for persistent storage
         await chatApi.markAsRead(chatId)
         
         // Update local state
@@ -266,10 +338,27 @@ export const useChatStore = defineStore('chat', {
     },
 
     setCurrentChat(chat) {
+      console.log('🔄 CHAT: Setting current chat:', chat?._id || 'null')
+      
+      // Leave previous chat if exists
+      if (this.currentChat && socketService.isConnected()) {
+        console.log('🚪 CHAT: Leaving previous chat:', this.currentChat._id)
+        socketService.leaveChat(this.currentChat._id)
+      }
+      
       this.currentChat = chat
       this.clearSearchResults()
       
       if (chat) {
+        console.log('🏠 CHAT: Setting new current chat and joining room:', chat._id)
+        
+        // Join new chat via socket immediately
+        if (socketService.isConnected()) {
+          socketService.joinChat(chat._id)
+        } else {
+          console.warn('⚠️ CHAT: Socket not connected, cannot join chat room')
+        }
+        
         this.fetchMessages(chat._id)
       } else {
         this.clearMessages()
@@ -277,25 +366,63 @@ export const useChatStore = defineStore('chat', {
     },
 
     addMessage(message) {
-      // Add to messages if it's for current chat
-      if (this.currentChat && message.chatId === this.currentChat._id) {
-        this.messages.push(message)
+      console.log('📝 addMessage called with:', {
+        messageId: message._id,
+        isTemporary: message.isTemporary,
+        content: message.content?.substring(0, 50) + '...',
+        currentChat: this.currentChat?._id
+      })
+      
+      // Determine the chatId from message or current chat context
+      const chatId = message.chatId || (this.currentChat && this.currentChat._id)
+      
+      if (!chatId) {
+        console.warn('❌ Cannot add message: no chatId available', message)
+        return
       }
       
-      // Update the last message in chats list
-      const chatIndex = this.chats.findIndex(chat => chat._id === message.chatId)
-      if (chatIndex !== -1) {
-        this.chats[chatIndex].lastMessage = message
-        this.chats[chatIndex].updatedAt = new Date()
+      console.log('📋 Using chatId:', chatId, 'Current messages count:', this.messages.length)
+      
+      // Add to messages if it's for current chat
+      if (this.currentChat && chatId === this.currentChat._id) {
+        // Check if message already exists to avoid duplicates
+        const existingIndex = this.messages.findIndex(msg => {
+          // For temporary messages, match by content and sender
+          if (message.isTemporary || msg.isTemporary) {
+            return msg.content === message.content && msg.senderId === message.senderId
+          }
+          // For real messages, match by ID
+          return msg._id === message._id
+        })
         
-        // Move the chat to the top
-        const updatedChat = this.chats.splice(chatIndex, 1)[0]
-        this.chats.unshift(updatedChat)
-        
-        // Update unread count if not current chat
-        if (!this.currentChat || message.chatId !== this.currentChat._id) {
-          this.chats[0].unreadCount = (this.chats[0].unreadCount || 0) + 1
-          this.unreadCount++
+        if (existingIndex === -1) {
+          this.messages.push(message)
+          console.log('✅ Message added to current chat. New count:', this.messages.length)
+        } else {
+          // Update existing message (replace temporary with real)
+          console.log('🔄 Updating existing message (temp->real or duplicate)')
+          this.messages[existingIndex] = message
+        }
+      } else {
+        console.log('ℹ️ Message not for current chat, skipping UI update')
+      }
+      
+      // Update the last message in chats list (only for non-temporary messages)
+      if (!message.isTemporary) {
+        const chatIndex = this.chats.findIndex(chat => chat._id === chatId)
+        if (chatIndex !== -1) {
+          this.chats[chatIndex].lastMessage = message
+          this.chats[chatIndex].updatedAt = new Date()
+          
+          // Move the chat to the top
+          const updatedChat = this.chats.splice(chatIndex, 1)[0]
+          this.chats.unshift(updatedChat)
+          
+          // Update unread count if not current chat
+          if (!this.currentChat || chatId !== this.currentChat._id) {
+            this.chats[0].unreadCount = (this.chats[0].unreadCount || 0) + 1
+            this.unreadCount++
+          }
         }
       }
     },

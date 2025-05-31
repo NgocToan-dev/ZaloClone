@@ -1,12 +1,12 @@
 import axios from 'axios'
 
 // Create axios instance
-const api = axios.create({
-  baseURL: 'http://localhost:5000'
+const httpClient = axios.create({
+  baseURL: window.__env.baseUrl
 })
 
 // Request interceptor
-api.interceptors.request.use(
+httpClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
     if (token) {
@@ -20,7 +20,7 @@ api.interceptors.request.use(
 )
 
 // Response interceptor
-api.interceptors.response.use(
+httpClient.interceptors.response.use(
   (response) => {
     return response
   },
@@ -36,20 +36,20 @@ api.interceptors.response.use(
 
 // HTTP method functions
 export const get = (url, config = {}) => {
-  return api.get(url, config)
+  return httpClient.get(url, config)
 }
 
 export const post = (url, data = {}, config = {}) => {
-  return api.post(url, data, config)
+  return httpClient.post(url, data, config)
 }
 
 export const put = (url, data = {}, config = {}) => {
-  return api.put(url, data, config)
+  return httpClient.put(url, data, config)
 }
 
 export const del = (url, config = {}) => {
-  return api.delete(url, config)
+  return httpClient.delete(url, config)
 }
 
 // Export the axios instance as default for backward compatibility
-export default api
+export default httpClient

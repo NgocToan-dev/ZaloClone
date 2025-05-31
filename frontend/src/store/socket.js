@@ -110,9 +110,16 @@ export const useSocketStore = defineStore('socket', {
 
       // Message events
       this.socket.on('message:new', (data) => {
-        console.log('New message received:', data)
-        chatStore.addMessage(data.message)
-        this.showNotification(data.message)
+        console.log('📨 New message received via socket:', data)
+        const message = data.message
+        
+        // Ensure message has chatId for proper binding
+        if (!message.chatId && data.chatId) {
+          message.chatId = data.chatId
+        }
+        
+        chatStore.addMessage(message)
+        this.showNotification(message)
         this.logEvent('message:new', data)
       })
 
@@ -313,7 +320,7 @@ export const useSocketStore = defineStore('socket', {
       const chatStore = useChatStore()
       
       // Don't show notification if it's from current user
-      if (message.senderId === authStore.user._id) return
+      if (message.sender._id === authStore.user._id) return
       
       // Don't show notification if chat is currently active
       if (chatStore.currentChat && message.chatId === chatStore.currentChat._id) return

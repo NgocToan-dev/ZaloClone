@@ -162,6 +162,8 @@ const handleSendMessage = async (socket: AuthenticatedSocket, data: SendMessageS
     const { chatId, content, messageType = 'text', replyTo } = data;
     const userId = socket.userId!;
 
+    console.log(`📤 BACKEND: Received send_message from user ${userId} for chat ${chatId}`);
+
     if (!content || content.trim().length === 0) {
       socket.emit(SocketEvents.ERROR, {
         message: 'Message content is required'
@@ -176,6 +178,7 @@ const handleSendMessage = async (socket: AuthenticatedSocket, data: SendMessageS
     });
 
     if (!chat) {
+      console.log(`❌ BACKEND: Chat ${chatId} not found or user ${userId} not participant`);
       socket.emit(SocketEvents.ERROR, {
         message: 'Chat not found or you are not a participant'
       } as SocketErrorData);
@@ -204,10 +207,30 @@ const handleSendMessage = async (socket: AuthenticatedSocket, data: SendMessageS
       .populate('senderId', 'firstName lastName email')
       .populate('replyTo');
 
+    if (!populatedMessage) {
+      socket.emit(SocketEvents.ERROR, {
+        message: 'Message not found after creation'
+      } as SocketErrorData);
+      return;
+    }
+
+    // Convert to plain object and map senderId to sender for frontend compatibility
+    const messageObj = populatedMessage.toObject();
+    const messageForSocket = {
+      ...messageObj,
+      sender: messageObj.senderId, // Map populated senderId object to sender
+      senderId: message.senderId // Keep original senderId as string ID
+    };
+
     const messageData: MessageSentSocketData = {
       chatId,
-      message: populatedMessage
+      message: messageForSocket as any // Type assertion to avoid complex typing
     };
+
+    // Check how many sockets are in the chat room
+    const roomSockets = await socket.nsp.in(chatId).fetchSockets();
+    console.log(`🏠 BACKEND: Chat room ${chatId} has ${roomSockets.length} connected sockets`);
+    console.log(`📡 BACKEND: Emitting MESSAGE_RECEIVED to room ${chatId}`);
 
     // Emit message to all users in the chat
     socket.to(chatId).emit(SocketEvents.MESSAGE_RECEIVED, messageData);
@@ -215,7 +238,7 @@ const handleSendMessage = async (socket: AuthenticatedSocket, data: SendMessageS
     // Confirm to sender
     socket.emit(SocketEvents.MESSAGE_SENT, messageData);
 
-    console.log(`💬 Message sent in chat ${chatId} by user ${userId}`);
+    console.log(`💬 BACKEND: Message sent in chat ${chatId} by user ${userId}`);
   } catch (error) {
     console.error('Send message error:', error);
     socket.emit(SocketEvents.ERROR, {
