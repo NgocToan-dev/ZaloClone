@@ -6,15 +6,27 @@ export enum MessageType {
   IMAGE = 'image',
   FILE = 'file',
   AUDIO = 'audio',
-  VIDEO = 'video'
+  VIDEO = 'video',
+  STICKER = 'sticker'
 }
 
 // Attachment Interface
 export interface Attachment {
+  fileId?: string;
   filename: string;
+  originalName?: string;
   url: string;
+  thumbnailUrl?: string;
   mimetype: string;
   size: number;
+  duration?: number;
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+  metadata?: {
+    [key: string]: any;
+  };
 }
 
 // Reaction Interface

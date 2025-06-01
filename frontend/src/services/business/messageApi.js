@@ -78,12 +78,17 @@ class MessageApi extends BaseApi {
     return await this.reactToMessage(messageId, reaction)
   }
 
-  async removeReaction(messageId, reaction) {
-    return await this.delete(`/${messageId}/reactions/${reaction}`)
+  async removeReaction(messageId) {
+    return await this.delete(`/${messageId}/react`)
   }
 
   async getMessageReactions(messageId) {
     return await this.get(`/${messageId}/reactions`)
+  }
+
+  // Toggle reaction (add if not exists, remove if exists)
+  async toggleReaction(messageId, reaction) {
+    return await this.reactToMessage(messageId, reaction)
   }
 
   // Message forwarding
@@ -105,11 +110,31 @@ class MessageApi extends BaseApi {
   }
 
   // Message attachments
-  async sendMessageWithAttachment(chatId, content, attachment) {
+  async sendMessageWithAttachment(chatId, content, attachments) {
     const formData = new FormData()
     formData.append('chatId', chatId)
-    formData.append('content', content)
-    formData.append('attachment', attachment)
+    formData.append('content', content || '')
+    
+    // Handle multiple attachments
+    if (Array.isArray(attachments)) {
+      attachments.forEach((attachment) => {
+        // If attachment is a file object
+        if (attachment instanceof File) {
+          formData.append('files', attachment)
+        }
+        // If attachment is already an uploaded file object
+        else if (attachment.fileId) {
+          formData.append('attachments', JSON.stringify(attachment))
+        }
+      })
+    } else if (attachments) {
+      // Single attachment
+      if (attachments instanceof File) {
+        formData.append('files', attachments)
+      } else if (attachments.fileId) {
+        formData.append('attachments', JSON.stringify(attachments))
+      }
+    }
     
     return await this.post('/with-attachment', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }

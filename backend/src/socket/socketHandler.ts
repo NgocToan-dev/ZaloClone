@@ -10,6 +10,7 @@ import {
   LeaveChatData,
   SendMessageSocketData,
   MessageSentSocketData,
+  ReactToMessageSocketData,
   TypingSocketData,
   MarkAsReadSocketData,
   SocketEvents,
@@ -159,14 +160,15 @@ const handleLeaveChat = (socket: AuthenticatedSocket, data: LeaveChatData): void
 // Handle sending a message
 const handleSendMessage = async (socket: AuthenticatedSocket, data: SendMessageSocketData): Promise<void> => {
   try {
-    const { chatId, content, messageType = 'text', replyTo } = data;
+    const { chatId, content, messageType = 'text', replyTo, attachments = [] } = data;
     const userId = socket.userId!;
 
     console.log(`📤 BACKEND: Received send_message from user ${userId} for chat ${chatId}`);
 
-    if (!content || content.trim().length === 0) {
+    // For file messages, content can be empty if there are attachments
+    if ((!content || content.trim().length === 0) && (!attachments || attachments.length === 0)) {
       socket.emit(SocketEvents.ERROR, {
-        message: 'Message content is required'
+        message: 'Message content or attachments are required'
       } as SocketErrorData);
       return;
     }
@@ -189,8 +191,9 @@ const handleSendMessage = async (socket: AuthenticatedSocket, data: SendMessageS
     const message = new Message({
       chatId,
       senderId: userId,
-      content: content.trim(),
+      content: content ? content.trim() : '',
       messageType,
+      attachments: attachments || [],
       replyTo
     });
 
@@ -315,6 +318,109 @@ const handleMarkAsRead = async (socket: AuthenticatedSocket, data: MarkAsReadSoc
   }
 };
 
+// Handle reacting to a message
+const handleReactToMessage = async (socket: AuthenticatedSocket, data: ReactToMessageSocketData): Promise<void> => {
+  try {
+    const { messageId, reaction } = data;
+    const userId = socket.userId!;
+
+    console.log(`😍 User ${userId} reacting to message ${messageId} with ${reaction}`);
+
+    if (!reaction || reaction.trim().length === 0) {
+      socket.emit(SocketEvents.ERROR, {
+        message: 'Reaction is required'
+      } as SocketErrorData);
+      return;
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      socket.emit(SocketEvents.ERROR, {
+        message: 'Message not found'
+      } as SocketErrorData);
+      return;
+    }
+
+    // Validate user has access to this message's chat
+    const chat = await Chat.findOne({
+      _id: message.chatId,
+      participants: userId
+    });
+
+    if (!chat) {
+      socket.emit(SocketEvents.ERROR, {
+        message: 'Access denied'
+      } as SocketErrorData);
+      return;
+    }
+
+    // Check if user already reacted with the same emoji
+    const existingReactionIndex = message.reactions.findIndex(
+      r => r.userId.toString() === userId && r.reaction === reaction
+    );
+
+    let reactionAction = 'added';
+    
+    if (existingReactionIndex !== -1) {
+      // If same reaction exists, remove it (toggle behavior)
+      message.reactions.splice(existingReactionIndex, 1);
+      reactionAction = 'removed';
+    } else {
+      // Check if user has any other reaction
+      const otherReactionIndex = message.reactions.findIndex(
+        r => r.userId.toString() === userId
+      );
+
+      if (otherReactionIndex !== -1) {
+        // Update existing reaction to new emoji
+        message.reactions[otherReactionIndex].reaction = reaction;
+        message.reactions[otherReactionIndex].createdAt = new Date();
+        reactionAction = 'updated';
+      } else {
+        // Add new reaction
+        message.reactions.push({
+          userId: userId,
+          reaction,
+          createdAt: new Date()
+        });
+      }
+    }
+
+    await message.save();
+
+    // Get user info for the reaction event
+    const user = await User.findById(userId).select('firstName lastName email');
+    
+    const reactionData = {
+      messageId,
+      chatId: message.chatId.toString(),
+      userId,
+      user: user ? {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email
+      } : null,
+      reaction,
+      action: reactionAction,
+      reactions: message.reactions,
+      timestamp: new Date()
+    };
+
+    // Emit to all users in the chat (including sender)
+    socket.to(message.chatId.toString()).emit(SocketEvents.MESSAGE_REACTION, reactionData);
+    socket.emit(SocketEvents.MESSAGE_REACTION, reactionData);
+
+    console.log(`😍 User ${userId} ${reactionAction} reaction ${reaction} to message ${messageId}`);
+  } catch (error) {
+    console.error('React to message error:', error);
+    socket.emit(SocketEvents.ERROR, {
+      message: 'Failed to react to message',
+      details: error
+    } as SocketErrorData);
+  }
+};
+
 // Main socket handler
 const socketHandler = (io: Server): void => {
   // Use authentication middleware
@@ -351,6 +457,11 @@ const socketHandler = (io: Server): void => {
     // Handle marking messages as read
     socket.on(SocketEvents.MARK_AS_READ, (data: MarkAsReadSocketData) => {
       handleMarkAsRead(socket, data);
+    });
+
+    // Handle message reactions
+    socket.on(SocketEvents.MESSAGE_REACTION, (data: ReactToMessageSocketData) => {
+      handleReactToMessage(socket, data);
     });
 
     // Handle disconnect

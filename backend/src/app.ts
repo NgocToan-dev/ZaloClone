@@ -10,6 +10,8 @@ import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
 import chatRoutes from './routes/chat';
 import messageRoutes from './routes/message';
+import fileRoutes from './routes/file';
+import stickerRoutes from './routes/sticker';
 
 // Import socket handler
 import socketHandler from './socket/socketHandler';
@@ -39,6 +41,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Static file serving for uploaded files (local storage)
+app.use('/uploads', express.static('uploads'));
+
 // Basic route
 app.get('/', (req, res) => {
   res.json({ message: 'ZaloClone Backend Server is running!' });
@@ -49,6 +54,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/stickers', stickerRoutes);
 
 // Socket.io connection handling
 socketHandler(io);

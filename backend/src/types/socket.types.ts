@@ -1,5 +1,5 @@
 import { Socket } from 'socket.io';
-import { TypingStatus, OnlineStatus } from './message.types';
+import { TypingStatus, OnlineStatus, Attachment } from './message.types';
 
 // Socket Events Enum
 export enum SocketEvents {
@@ -75,6 +75,7 @@ export interface SendMessageSocketData {
   content: string;
   messageType?: string;
   replyTo?: string;
+  attachments?: Attachment[];
 }
 
 // Message Sent Socket Data

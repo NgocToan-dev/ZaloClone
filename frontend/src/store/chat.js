@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import chatApi from '@services/business/chatApi.js'
 import messageApi from '@services/business/messageApi.js'
+import fileApi from '@services/business/fileApi.js'
+import stickerApi from '@services/business/stickerApi.js'
 import socketService from '@services/business/socket.js'
 import { useAuthStore } from './auth.js'
 
@@ -19,7 +21,12 @@ export const useChatStore = defineStore('chat', {
     unreadCount: 0,
     typingUsers: {},
     archivedChats: [],
-    messageDrafts: {} // chatId -> draft content
+    messageDrafts: {}, // chatId -> draft content
+    // File upload state
+    fileUploads: {}, // chatId -> upload state
+    pendingFiles: {}, // chatId -> files pending to be sent
+    isUploading: false,
+    uploadProgress: 0
   }),
 
   getters: {
@@ -34,7 +41,13 @@ export const useChatStore = defineStore('chat', {
     getMessageById: (state) => (messageId) => state.messages.find(msg => msg._id === messageId),
     getTypingUsers: (state) => (chatId) => state.typingUsers[chatId] || [],
     getDraft: (state) => (chatId) => state.messageDrafts[chatId] || '',
-    getSearchResults: (state) => state.searchResults
+    getSearchResults: (state) => state.searchResults,
+    // File upload getters
+    getFileUploadState: (state) => (chatId) => state.fileUploads[chatId] || null,
+    getPendingFiles: (state) => (chatId) => state.pendingFiles[chatId] || [],
+    getUploadProgress: (state) => state.uploadProgress,
+    isFileUploading: (state) => state.isUploading,
+    hasFileAttachments: (state) => (message) => message.attachments && message.attachments.length > 0
   },
 
   actions: {
@@ -529,6 +542,300 @@ export const useChatStore = defineStore('chat', {
       this.error = null
     },
 
+    // File upload actions
+    async uploadFiles(chatId, files) {
+      try {
+        this.isUploading = true
+        this.uploadProgress = 0
+        this.error = null
+        
+        console.log('📤 Uploading files:', { chatId, fileCount: files.length })
+        
+        // Validate files before upload
+        const validationResults = Array.from(files).map(file => ({
+          file,
+          validation: fileApi.validateFile(file)
+        }))
+        
+        const invalidFiles = validationResults.filter(result => !result.validation.isValid)
+        if (invalidFiles.length > 0) {
+          const errors = invalidFiles.flatMap(result => result.validation.errors)
+          throw new Error(`File validation failed: ${errors.join(', ')}`)
+        }
+        
+        // Upload files with progress tracking
+        const response = await fileApi.uploadToChat(chatId, files, (progress) => {
+          this.uploadProgress = progress
+          console.log('📊 Upload progress:', progress + '%')
+        })
+        
+        console.log('✅ Files uploaded successfully:', response.data)
+        return response.data
+        
+      } catch (error) {
+        this.error = error.message || 'Failed to upload files'
+        console.error('❌ File upload failed:', error)
+        throw error
+      } finally {
+        this.isUploading = false
+        this.uploadProgress = 0
+      }
+    },
+
+    async sendMessageWithFiles(chatId, content, files) {
+      try {
+        console.log('📤 Sending message with files:', { chatId, content, fileCount: files.length })
+        
+        // Upload files first
+        const uploadResponse = await this.uploadFiles(chatId, files)
+        const attachments = uploadResponse.files
+        
+        // Send message with attachments via API (not socket for file messages)
+        const response = await messageApi.sendMessageWithAttachment(chatId, content, attachments)
+        
+        console.log('📥 Message with files sent:', response.data)
+        
+        const message = response.data.messageData || response.data.message
+        if (message) {
+          if (!message.chatId) {
+            message.chatId = chatId
+          }
+          this.addMessage(message)
+          this.clearDraft(chatId)
+        }
+        
+        return message
+      } catch (error) {
+        this.error = error.message || 'Failed to send message with files'
+        console.error('❌ Failed to send message with files:', error)
+        throw error
+      }
+    },
+
+    setPendingFiles(chatId, files) {
+      this.pendingFiles[chatId] = Array.from(files).map(file => ({
+        file,
+        id: `${Date.now()}_${Math.random()}`,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        preview: null
+      }))
+    },
+
+    removePendingFile(chatId, fileId) {
+      if (this.pendingFiles[chatId]) {
+        this.pendingFiles[chatId] = this.pendingFiles[chatId].filter(f => f.id !== fileId)
+        if (this.pendingFiles[chatId].length === 0) {
+          delete this.pendingFiles[chatId]
+        }
+      }
+    },
+
+    clearPendingFiles(chatId) {
+      delete this.pendingFiles[chatId]
+    },
+
+    async generateFilePreview(chatId, fileId) {
+      const pendingFile = this.pendingFiles[chatId]?.find(f => f.id === fileId)
+      if (!pendingFile || !fileApi.isPreviewable(pendingFile.type)) {
+        return null
+      }
+
+      return new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          pendingFile.preview = e.target.result
+          resolve(e.target.result)
+        }
+        reader.readAsDataURL(pendingFile.file)
+      })
+    },
+
+    async getChatFiles(chatId, options = {}) {
+      try {
+        const response = await fileApi.getChatFiles(chatId, options)
+        return response.data
+      } catch (error) {
+        console.error('Failed to get chat files:', error)
+        throw error
+      }
+    },
+
+    async deleteFile(fileId) {
+      try {
+        await fileApi.deleteFile(fileId)
+        return true
+      } catch (error) {
+        console.error('Failed to delete file:', error)
+        throw error
+      }
+    },
+
+    // Sticker actions
+    async sendStickerMessage(stickerData) {
+      try {
+        console.log('🎨 Sending sticker message:', stickerData)
+        
+        const { stickerId, packId, chatId, stickerUrl, stickerName, isAnimated, dimensions } = stickerData
+        
+        // Send via socket for real-time communication
+        if (socketService.isConnected()) {
+          // Create sticker message content
+          const stickerContent = {
+            stickerId,
+            packId,
+            stickerUrl,
+            stickerName,
+            isAnimated,
+            dimensions
+          }
+          
+          // Create temporary message for immediate UI feedback
+          const authStore = useAuthStore()
+          const tempMessage = {
+            _id: `temp_${Date.now()}`,
+            chatId,
+            content: JSON.stringify(stickerContent),
+            messageType: 'sticker',
+            senderId: authStore.currentUser._id,
+            sender: authStore.currentUser,
+            createdAt: new Date(),
+            isTemporary: true
+          }
+          
+          // Add to UI immediately for sender
+          console.log('🎨 Adding temporary sticker message to UI:', tempMessage)
+          this.addMessage(tempMessage)
+          
+          // Send via socket
+          const messageData = {
+            chatId,
+            content: JSON.stringify(stickerContent),
+            messageType: 'sticker'
+          }
+          
+          socketService.sendMessage(messageData)
+          return tempMessage
+        }
+        
+        // Fallback to API when socket is not connected
+        const response = await stickerApi.sendStickerMessage(stickerData)
+        console.log('📥 Sticker API response:', response)
+        
+        const message = response.messageData
+        if (message) {
+          if (!message.chatId) {
+            message.chatId = chatId
+          }
+          this.addMessage(message)
+        }
+        
+        return message
+      } catch (error) {
+        console.error('❌ Failed to send sticker message:', error)
+        this.error = error.response?.data?.message || 'Failed to send sticker'
+        throw error
+      }
+    },
+
+    // Parse sticker content from message
+    parseStickerContent(message) {
+      if (message.messageType !== 'sticker') return null
+      
+      try {
+        return JSON.parse(message.content)
+      } catch (error) {
+        console.error('Failed to parse sticker content:', error)
+        return null
+      }
+    },
+
+    // Check if message is a sticker
+    isStickerMessage(message) {
+      return message.messageType === 'sticker'
+    },
+
+    // Emoji reactions
+    async addReaction(messageId, emoji) {
+      try {
+        console.log('😍 Adding reaction:', { messageId, emoji })
+        
+        // Send via socket for real-time updates
+        if (socketService.isConnected()) {
+          socketService.reactToMessage(messageId, emoji)
+        }
+        
+        // Also call API for persistence
+        const response = await messageApi.addReaction(messageId, emoji)
+        console.log('✅ Reaction added via API:', response.data)
+        
+        return response.data
+      } catch (error) {
+        console.error('❌ Failed to add reaction:', error)
+        this.error = error.response?.data?.message || 'Failed to add reaction'
+        throw error
+      }
+    },
+
+    async removeReaction(messageId) {
+      try {
+        console.log('🗑️ Removing reaction from message:', messageId)
+        
+        // Send via socket for real-time updates
+        if (socketService.isConnected()) {
+          socketService.removeReaction(messageId)
+        }
+        
+        // Also call API for persistence
+        const response = await messageApi.removeReaction(messageId)
+        console.log('✅ Reaction removed via API:', response.data)
+        
+        return response.data
+      } catch (error) {
+        console.error('❌ Failed to remove reaction:', error)
+        this.error = error.response?.data?.message || 'Failed to remove reaction'
+        throw error
+      }
+    },
+
+    async toggleReaction(messageId, emoji) {
+      try {
+        console.log('🔄 Toggling reaction:', { messageId, emoji })
+        
+        // Send via socket for real-time updates (backend handles toggle logic)
+        if (socketService.isConnected()) {
+          socketService.reactToMessage(messageId, emoji)
+        }
+        
+        // Also call API for persistence
+        const response = await messageApi.toggleReaction(messageId, emoji)
+        console.log('✅ Reaction toggled via API:', response.data)
+        
+        return response.data
+      } catch (error) {
+        console.error('❌ Failed to toggle reaction:', error)
+        this.error = error.response?.data?.message || 'Failed to toggle reaction'
+        throw error
+      }
+    },
+
+    // Handle real-time reaction updates from socket
+    updateMessageReaction(reactionData) {
+      console.log('😍 Updating message reaction:', reactionData)
+      
+      const { messageId, reactions, action } = reactionData
+      
+      // Find and update the message in current messages
+      const messageIndex = this.messages.findIndex(msg => msg._id === messageId)
+      if (messageIndex !== -1) {
+        this.messages[messageIndex].reactions = reactions || []
+        console.log(`✅ Updated message ${messageId} reactions (${action}):`, reactions?.length || 0, 'reactions')
+      } else {
+        console.log('ℹ️ Message not found in current messages, might be in different chat')
+      }
+    },
+
     resetStore() {
       this.chats = []
       this.currentChat = null
@@ -537,6 +844,10 @@ export const useChatStore = defineStore('chat', {
       this.archivedChats = []
       this.typingUsers = {}
       this.messageDrafts = {}
+      this.fileUploads = {}
+      this.pendingFiles = {}
+      this.isUploading = false
+      this.uploadProgress = 0
       this.unreadCount = 0
       this.error = null
       

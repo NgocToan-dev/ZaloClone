@@ -2,13 +2,22 @@ import mongoose, { Schema } from 'mongoose';
 import { IMessage, MessageType, Attachment, Reaction } from '../types/message.types';
 
 const attachmentSchema = new Schema<Attachment>({
+  fileId: {
+    type: String
+  },
   filename: {
     type: String,
     required: true
   },
+  originalName: {
+    type: String
+  },
   url: {
     type: String,
     required: true
+  },
+  thumbnailUrl: {
+    type: String
   },
   mimetype: {
     type: String,
@@ -17,6 +26,21 @@ const attachmentSchema = new Schema<Attachment>({
   size: {
     type: Number,
     required: true
+  },
+  duration: {
+    type: Number
+  },
+  dimensions: {
+    width: {
+      type: Number
+    },
+    height: {
+      type: Number
+    }
+  },
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   }
 }, { _id: false });
 

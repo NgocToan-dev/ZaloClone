@@ -312,14 +312,48 @@ export const reactToMessage = async (
       return;
     }
 
-    // Check if user already reacted
+    // Validate user has access to this message's chat
+    const chat = await Chat.findOne({
+      _id: message.chatId,
+      participants: userId
+    });
+
+    if (!chat) {
+      res.status(403).json({
+        message: 'Access denied',
+        messageId: '',
+        reaction: {} as any
+      });
+      return;
+    }
+
+    // Check if user already reacted with the same emoji
     const existingReactionIndex = message.reactions.findIndex(
-      r => r.userId.toString() === userId?.toString()
+      r => r.userId.toString() === userId?.toString() && r.reaction === reaction
     );
 
     if (existingReactionIndex !== -1) {
-      // Update existing reaction
-      message.reactions[existingReactionIndex].reaction = reaction;
+      // If same reaction exists, remove it (toggle behavior)
+      message.reactions.splice(existingReactionIndex, 1);
+      await message.save();
+      
+      res.json({
+        message: 'Reaction removed successfully',
+        messageId,
+        reaction: { userId: userId!, reaction, createdAt: new Date() }
+      });
+      return;
+    }
+
+    // Check if user has any other reaction
+    const otherReactionIndex = message.reactions.findIndex(
+      r => r.userId.toString() === userId?.toString()
+    );
+
+    if (otherReactionIndex !== -1) {
+      // Update existing reaction to new emoji
+      message.reactions[otherReactionIndex].reaction = reaction;
+      message.reactions[otherReactionIndex].createdAt = new Date();
     } else {
       // Add new reaction
       message.reactions.push({
@@ -346,6 +380,112 @@ export const reactToMessage = async (
       message: 'Server error',
       messageId: '',
       reaction: {} as any
+    });
+  }
+};
+
+// Remove reaction from a message
+export const removeReaction = async (
+  req: Request<{ messageId: string }, { message: string; messageId: string }>,
+  res: TypedResponse<{ message: string; messageId: string }>
+): Promise<void> => {
+  try {
+    const { messageId } = req.params;
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?._id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      res.status(404).json({
+        message: 'Message not found',
+        messageId: ''
+      });
+      return;
+    }
+
+    // Validate user has access to this message's chat
+    const chat = await Chat.findOne({
+      _id: message.chatId,
+      participants: userId
+    });
+
+    if (!chat) {
+      res.status(403).json({
+        message: 'Access denied',
+        messageId: ''
+      });
+      return;
+    }
+
+    // Remove user's reaction
+    const initialLength = message.reactions.length;
+    message.reactions = message.reactions.filter(
+      r => r.userId.toString() !== userId?.toString()
+    );
+
+    if (message.reactions.length === initialLength) {
+      res.status(404).json({
+        message: 'No reaction found to remove',
+        messageId
+      });
+      return;
+    }
+
+    await message.save();
+
+    res.json({
+      message: 'Reaction removed successfully',
+      messageId
+    });
+  } catch (error) {
+    console.error('Remove reaction error:', error);
+    res.status(500).json({
+      message: 'Server error',
+      messageId: ''
+    });
+  }
+};
+
+// Get reactions for a message
+export const getMessageReactions = async (
+  req: Request<{ messageId: string }, { reactions: any[] }>,
+  res: TypedResponse<{ reactions: any[] }>
+): Promise<void> => {
+  try {
+    const { messageId } = req.params;
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?._id;
+
+    const message = await Message.findById(messageId)
+      .populate('reactions.userId', 'firstName lastName email');
+
+    if (!message) {
+      res.status(404).json({
+        reactions: []
+      });
+      return;
+    }
+
+    // Validate user has access to this message's chat
+    const chat = await Chat.findOne({
+      _id: message.chatId,
+      participants: userId
+    });
+
+    if (!chat) {
+      res.status(403).json({
+        reactions: []
+      });
+      return;
+    }
+
+    res.json({
+      reactions: message.reactions
+    });
+  } catch (error) {
+    console.error('Get reactions error:', error);
+    res.status(500).json({
+      reactions: []
     });
   }
 };

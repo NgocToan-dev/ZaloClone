@@ -1,9 +1,28 @@
-# Active Context - CurrentChat Persistence Issue
+# Active Context - UI/UX Improvements
 
-## Current Problem ✅ SOLVED
+## Current Work ✅ COMPLETED
+Fixed emoji picker and file attachment UI styling issues:
+
+1. **Emoji Picker Button Styling**:
+   - Updated from basic SVG to modern circular button design
+   - Added hover effects and active states
+   - Consistent sizing (36px diameter)
+
+2. **File Attachment Layout**:
+   - Fixed alignment issues - moved file upload button to same line as message input
+   - Redesigned file upload button with modern circular styling (48px diameter)
+   - Improved overall message input area layout
+
+3. **Message Input Layout**:
+   - Reorganized layout to have file upload, message input, and send button on same line
+   - Updated spacing and positioning of emoji/sticker pickers inside textarea
+   - Made send button circular with better visual feedback
+
+## Previous Problems ✅ SOLVED
+### CurrentChat Persistence Issue ✅ SOLVED
 Mỗi lần F5 (refresh) thì currentChat không còn nữa, người dùng phải chọn lại chat.
 
-## Previous Problem ✅ SOLVED
+### Message Display Issue ✅ SOLVED
 Sau khi gửi tin nhắn, message không hiển thị trong UI mặc dù API response thành công.
 
 ## API Response Analysis

@@ -98,6 +98,17 @@ class SocketService {
       }
     })
 
+    // Reaction events
+    this.socket.on('message_reaction', (data) => {
+      console.log('😍 SOCKET: Received message_reaction event:', data)
+      
+      if (this.chatStore && data.messageId) {
+        this.chatStore.updateMessageReaction(data)
+      } else {
+        console.warn('⚠️ SOCKET: Invalid reaction data or no chat store:', data)
+      }
+    })
+
     // Auth events
     this.socket.on('auth_success', (data) => {
       console.log('✅ SOCKET: Auth success:', data)
@@ -173,6 +184,24 @@ class SocketService {
   markAsRead(chatId, messageIds = []) {
     if (this.socket?.connected) {
       this.socket.emit('mark_as_read', { chatId, messageIds })
+    }
+  }
+
+  reactToMessage(messageId, reaction) {
+    if (this.socket?.connected) {
+      this.socket.emit('message_reaction', { messageId, reaction })
+      console.log('😍 SOCKET: Sending reaction via socket:', { messageId, reaction })
+    } else {
+      console.warn('⚠️ SOCKET: Cannot send reaction - not connected')
+    }
+  }
+
+  removeReaction(messageId) {
+    if (this.socket?.connected) {
+      this.socket.emit('remove_reaction', { messageId })
+      console.log('🗑️ SOCKET: Removing reaction via socket:', { messageId })
+    } else {
+      console.warn('⚠️ SOCKET: Cannot remove reaction - not connected')
     }
   }
 
